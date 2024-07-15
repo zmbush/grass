@@ -1,6 +1,6 @@
 #![cfg_attr(feature = "nightly", feature(track_path))]
 
-use std::{cell::RefCell, collections::HashSet, path::PathBuf};
+use std::{cell::RefCell, collections::HashSet, future::Future, path::PathBuf};
 
 use grass_compiler::StdFs;
 use proc_macro::TokenStream;
@@ -35,7 +35,10 @@ impl<'a> grass_compiler::Fs for FileTracker<'a> {
         self.fs.is_file(path)
     }
 
-    fn read(&self, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    fn read(
+        &self,
+        path: &std::path::Path,
+    ) -> std::pin::Pin<Box<dyn Future<Output = std::io::Result<Vec<u8>>>>> {
         if let Ok(p) = std::fs::canonicalize(path) {
             self.files.borrow_mut().insert(p);
         }
@@ -98,12 +101,12 @@ pub fn include_sass(item: TokenStream) -> TokenStream {
 
     let value = input.value();
 
-    let css = match grass_compiler::from_path(
+    let css = match smol::block_on(grass_compiler::from_path(
         value,
         &options
             .fs(&fs)
             .style(grass_compiler::OutputStyle::Compressed),
-    ) {
+    )) {
         Ok(css) => css,
         Err(e) => {
             let err = syn::Error::new(input.span(), format!("Failed to compile Sass\n{}", e));

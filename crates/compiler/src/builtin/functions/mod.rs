@@ -43,9 +43,10 @@ static FUNCTION_COUNT: AtomicUsize = AtomicUsize::new(0);
 ///     Ok(Value::Dimension(SassNumber::new_unitless(len + 2)))
 /// }
 ///
-/// fn main() {
+/// #[tokio::main]
+/// async fn main() {
 ///     let options = Options::default().add_custom_fn("length", Builtin::new(length));
-///     let css = grass_compiler::from_string("a { color: length([a, b]); }", &options).unwrap();
+///     let css = grass_compiler::from_string("a { color: length([a, b]); }", &options).await.unwrap();
 ///
 ///     assert_eq!(css, "a {\n  color: 4;\n}\n");
 /// }

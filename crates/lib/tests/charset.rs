@@ -60,8 +60,8 @@ error!(
     "@charset /*", "Error: expected more input."
 );
 
-#[test]
-fn charset_not_allowed_expanded() {
+#[tokio::test]
+async fn charset_not_allowed_expanded() {
     let input = r#"
         a {
             color: 🦆;
@@ -74,12 +74,13 @@ fn charset_not_allowed_expanded() {
             input.to_string(),
             &grass::Options::default().allows_charset(false)
         )
+        .await
         .expect(input)
     );
 }
 
-#[test]
-fn charset_not_allowed_compressed() {
+#[tokio::test]
+async fn charset_not_allowed_compressed() {
     let input = r#"
         a {
             color: 🦆;
@@ -94,6 +95,7 @@ fn charset_not_allowed_compressed() {
                 .allows_charset(false)
                 .style(OutputStyle::Compressed)
         )
+        .await
         .expect(input)
     );
 }

@@ -5,14 +5,16 @@ use macros::TestFs;
 #[macro_use]
 mod macros;
 
-#[test]
-fn null_fs_cannot_import() {
+#[tokio::test]
+async fn null_fs_cannot_import() {
     let input = "@import \"__foo\";";
     tempfile!("__foo.scss", "");
     match grass::from_string(
         input.to_string(),
         &grass::Options::default().fs(&grass::NullFs),
-    ) {
+    )
+    .await
+    {
         Err(e)
             if e.to_string()
                 .starts_with("Error: Can't find stylesheet to import.\n") =>
@@ -24,8 +26,8 @@ fn null_fs_cannot_import() {
     }
 }
 
-#[test]
-fn imports_variable() {
+#[tokio::test]
+async fn imports_variable() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"$a: red;"#);
@@ -39,7 +41,9 @@ fn imports_variable() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
@@ -52,15 +56,15 @@ fn import_no_semicolon() {
     drop(input);
 }
 
-#[test]
-fn import_no_quotes() {
+#[tokio::test]
+async fn import_no_quotes() {
     let input = "@import import_no_quotes";
 
     assert_err!("Error: Expected string.", input);
 }
 
-#[test]
-fn single_quotes_import() {
+#[tokio::test]
+async fn single_quotes_import() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"$a: red;"#);
@@ -74,12 +78,14 @@ fn single_quotes_import() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn comma_separated_import() {
+#[tokio::test]
+async fn comma_separated_import() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"$a: red"#);
@@ -95,12 +101,14 @@ fn comma_separated_import() {
 
     assert_eq!(
         "p {\n  color: blue;\n}\n\na {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn comma_separated_import_order() {
+#[tokio::test]
+async fn comma_separated_import_order() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"p { color: red; }"#);
@@ -112,12 +120,14 @@ fn comma_separated_import_order() {
 
     assert_eq!(
         "@import url(third);\np {\n  color: red;\n}\n\np {\n  color: blue;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn comma_separated_import_order_css() {
+#[tokio::test]
+async fn comma_separated_import_order_css() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.css", r#"p { color: red; }"#);
@@ -129,12 +139,14 @@ fn comma_separated_import_order_css() {
 
     assert_eq!(
         "@import \"a.css\";\n@import url(third);\np {\n  color: blue;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn basic_load_path() {
+#[tokio::test]
+async fn basic_load_path() {
     tempfile!(
         "basic_load_path__a.scss",
         "@import \"basic_load_path__b\";\na {\n color: $a;\n}",
@@ -152,12 +164,13 @@ fn basic_load_path() {
             "dir-basic_load_path__a/basic_load_path__a.scss",
             &grass::Options::default().load_path(std::path::Path::new("dir-basic_load_path__b"))
         )
+        .await
         .unwrap()
     );
 }
 
-#[test]
-fn load_path_same_directory() {
+#[tokio::test]
+async fn load_path_same_directory() {
     tempfile!(
         "load_path_same_directory__a.scss",
         "@import \"dir-load_path_same_directory__a/load_path_same_directory__b\";\na {\n color: $a;\n}",
@@ -175,12 +188,13 @@ fn load_path_same_directory() {
             "dir-load_path_same_directory__a/load_path_same_directory__a.scss",
             &grass::Options::default().load_path(std::path::Path::new("."))
         )
+        .await
         .unwrap()
     );
 }
 
-#[test]
-fn comma_separated_import_trailing() {
+#[tokio::test]
+async fn comma_separated_import_trailing() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"p { color: red; }"#);
@@ -193,8 +207,8 @@ fn comma_separated_import_trailing() {
     assert_err!("Error: Expected string.", input);
 }
 
-#[test]
-fn finds_name_scss() {
+#[tokio::test]
+async fn finds_name_scss() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"$a: red;"#);
@@ -208,12 +222,14 @@ fn finds_name_scss() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn finds_underscore_name_scss() {
+#[tokio::test]
+async fn finds_underscore_name_scss() {
     let mut fs = TestFs::new();
     fs.add_file("_a.scss", r#"$a: red;"#);
 
@@ -226,12 +242,14 @@ fn finds_underscore_name_scss() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn chained_imports() {
+#[tokio::test]
+async fn chained_imports() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"@import "b";"#);
@@ -247,12 +265,14 @@ fn chained_imports() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn imports_plain_css() {
+#[tokio::test]
+async fn imports_plain_css() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.css", r#"a { color: red; }"#);
@@ -263,12 +283,14 @@ fn imports_plain_css() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn imports_import_only_scss() {
+#[tokio::test]
+async fn imports_import_only_scss() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.import.scss", r#"a { color: red; }"#);
@@ -279,12 +301,14 @@ fn imports_import_only_scss() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn imports_sass_file() {
+#[tokio::test]
+async fn imports_sass_file() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.sass", "a\n\tcolor: red\n");
@@ -295,12 +319,14 @@ fn imports_sass_file() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn imports_absolute_scss() {
+#[tokio::test]
+async fn imports_absolute_scss() {
     let mut fs = TestFs::new();
 
     fs.add_file("/foo/a.scss", r#"a { color: red; }"#);
@@ -311,12 +337,14 @@ fn imports_absolute_scss() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn imports_same_file_twice() {
+#[tokio::test]
+async fn imports_same_file_twice() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"a { color: red; }"#);
@@ -328,12 +356,14 @@ fn imports_same_file_twice() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n\na {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn imports_same_file_thrice() {
+#[tokio::test]
+async fn imports_same_file_thrice() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"a { color: red; }"#);
@@ -346,11 +376,13 @@ fn imports_same_file_thrice() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n\na {\n  color: red;\n}\n\na {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
-#[test]
-fn imports_self() {
+#[tokio::test]
+async fn imports_self() {
     let mut fs = TestFs::new();
 
     fs.add_file("input.scss", r#"@import "input";"#);
@@ -366,8 +398,8 @@ fn imports_self() {
     );
 }
 
-#[test]
-fn imports_explicit_file_extension() {
+#[tokio::test]
+async fn imports_explicit_file_extension() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"a { color: red; }"#);
@@ -378,12 +410,14 @@ fn imports_explicit_file_extension() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn potentially_conflicting_directory_and_file() {
+#[tokio::test]
+async fn potentially_conflicting_directory_and_file() {
     tempfile!(
         "index.scss",
         "$a: wrong;",
@@ -403,12 +437,14 @@ fn potentially_conflicting_directory_and_file() {
 
     assert_eq!(
         "a {\n  color: right;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn finds_index_file_no_underscore() {
+#[tokio::test]
+async fn finds_index_file_no_underscore() {
     tempfile!(
         "index.scss",
         "$a: right;",
@@ -424,12 +460,14 @@ fn finds_index_file_no_underscore() {
 
     assert_eq!(
         "a {\n  color: right;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn finds_index_file_with_underscore() {
+#[tokio::test]
+async fn finds_index_file_with_underscore() {
     tempfile!(
         "_index.scss",
         "$a: right;",
@@ -445,12 +483,14 @@ fn finds_index_file_with_underscore() {
 
     assert_eq!(
         "a {\n  color: right;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn potentially_conflicting_directory_and_file_from_load_path() {
+#[tokio::test]
+async fn potentially_conflicting_directory_and_file_from_load_path() {
     tempfile!(
         "_potentially_conflicting_directory_and_file_from_load_path.scss",
         "$a: right;",
@@ -477,12 +517,13 @@ fn potentially_conflicting_directory_and_file_from_load_path() {
                 "potentially_conflicting_directory_and_file_from_load_path__a"
             ))
         )
+        .await
         .expect(input)
     );
 }
 
-#[test]
-fn chained_imports_in_directory() {
+#[tokio::test]
+async fn chained_imports_in_directory() {
     let input = "@import \"chained_imports_in_directory__a\";\na {\n color: $a;\n}";
     tempfile!(
         "chained_imports_in_directory__a.scss",
@@ -496,12 +537,14 @@ fn chained_imports_in_directory() {
     tempfile!("chained_imports_in_directory__c.scss", "$a: red;");
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn explicit_file_extension_import_inside_index_file() {
+#[tokio::test]
+async fn explicit_file_extension_import_inside_index_file() {
     let input =
         "@import \"explicit_file_extension_import_inside_index_file\";\na {\n color: $a;\n}";
     tempfile!(
@@ -516,7 +559,9 @@ fn explicit_file_extension_import_inside_index_file() {
     );
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 error!(

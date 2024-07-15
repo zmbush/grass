@@ -15,11 +15,12 @@ implementation.
 ## Use as library
 ```
 # use grass_compiler as grass;
-fn main() -> Result<(), Box<grass::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<grass::Error>> {
     let css = grass::from_string(
         "a { b { color: &; } }".to_owned(),
         &grass::Options::default().style(grass::OutputStyle::Compressed)
-    )?;
+    ).await?;
     assert_eq!(css, "a b{color:a b}");
     Ok(())
 }
@@ -165,10 +166,10 @@ pub fn parse_stylesheet<P: AsRef<Path>>(
     Ok(stylesheet)
 }
 
-fn from_string_with_file_name<P: AsRef<Path>>(
+async fn from_string_with_file_name<P: AsRef<Path>>(
     input: String,
     file_name: P,
-    options: &Options,
+    options: &Options<'_>,
 ) -> Result<String> {
     let mut map = CodeMap::new();
     let path = file_name.as_ref();
@@ -198,7 +199,7 @@ fn from_string_with_file_name<P: AsRef<Path>>(
     };
 
     let mut visitor = Visitor::new(path, options, &mut map, empty_span);
-    match visitor.visit_stylesheet(stylesheet) {
+    match visitor.visit_stylesheet(stylesheet).await {
         Ok(_) => {}
         Err(e) => return Err(raw_to_parse_error(&map, *e, options.unicode_error_messages)),
     }
@@ -233,33 +234,42 @@ fn from_string_with_file_name<P: AsRef<Path>>(
 ///
 /// ```
 /// # use grass_compiler as grass;
-/// fn main() -> Result<(), Box<grass::Error>> {
-///     let css = grass::from_path("input.scss", &grass::Options::default())?;
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<grass::Error>> {
+///     let css = grass::from_path("input.scss", &grass::Options::default()).await?;
 ///     Ok(())
 /// }
 /// ```
 #[inline]
-pub fn from_path<P: AsRef<Path>>(p: P, options: &Options) -> Result<String> {
-    from_string_with_file_name(String::from_utf8(options.fs.read(p.as_ref())?)?, p, options)
+pub async fn from_path<P: AsRef<Path>>(p: P, options: &Options<'_>) -> Result<String> {
+    from_string_with_file_name(
+        String::from_utf8(options.fs.read(p.as_ref()).await?)?,
+        p,
+        options,
+    )
+    .await
 }
 
 /// Compile CSS from a string
 ///
 /// ```
 /// # use grass_compiler as grass;
-/// fn main() -> Result<(), Box<grass::Error>> {
-///     let css = grass::from_string("a { b { color: &; } }".to_string(), &grass::Options::default())?;
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<grass::Error>> {
+///     let css = grass::from_string("a { b { color: &; } }".to_string(), &grass::Options::default()).await?;
 ///     assert_eq!(css, "a b {\n  color: a b;\n}\n");
 ///     Ok(())
 /// }
 /// ```
 #[inline]
-pub fn from_string<S: Into<String>>(input: S, options: &Options) -> Result<String> {
-    from_string_with_file_name(input.into(), "stdin", options)
+pub async fn from_string<S: Into<String>>(input: S, options: &Options<'_>) -> Result<String> {
+    from_string_with_file_name(input.into(), "stdin", options).await
 }
 
 #[cfg(feature = "wasm-exports")]
 #[wasm_bindgen(js_name = from_string)]
-pub fn from_string_js(input: String) -> std::result::Result<String, String> {
-    from_string(input, &Options::default()).map_err(|e| e.to_string())
+pub async fn from_string_js(input: String) -> std::result::Result<String, String> {
+    from_string(input, &Options::default())
+        .await
+        .map_err(|e| e.to_string())
 }

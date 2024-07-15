@@ -1,6 +1,8 @@
 use std::{
+    future::{self, Future},
     io::{self, Error, ErrorKind},
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
 /// A trait to allow replacing the file system lookup mechanisms.
@@ -17,7 +19,7 @@ pub trait Fs: std::fmt::Debug {
     /// Returns `true` if the path exists on disk and is pointing at a regular file.
     fn is_file(&self, path: &Path) -> bool;
     /// Read the entire contents of a file into a bytes vector.
-    fn read(&self, path: &Path) -> io::Result<Vec<u8>>;
+    fn read(&self, path: &Path) -> Pin<Box<dyn Future<Output = io::Result<Vec<u8>>>>>;
 
     /// Canonicalize a file path
     fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
@@ -43,8 +45,8 @@ impl Fs for StdFs {
     }
 
     #[inline]
-    fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
-        std::fs::read(path)
+    fn read(&self, path: &Path) -> Pin<Box<dyn Future<Output = io::Result<Vec<u8>>>>> {
+        Box::pin(future::ready(std::fs::read(path)))
     }
 
     #[inline]
@@ -73,10 +75,10 @@ impl Fs for NullFs {
     }
 
     #[inline]
-    fn read(&self, _path: &Path) -> io::Result<Vec<u8>> {
-        Err(Error::new(
+    fn read(&self, _path: &Path) -> Pin<Box<dyn Future<Output = io::Result<Vec<u8>>>>> {
+        Box::pin(future::ready(Err(Error::new(
             ErrorKind::NotFound,
             "NullFs, there is no file system",
-        ))
+        ))))
     }
 }

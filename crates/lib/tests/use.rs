@@ -89,8 +89,8 @@ test!(
     "a {\n  color: -0.4161468365;\n}\n"
 );
 
-#[test]
-fn use_user_defined_same_directory() {
+#[tokio::test]
+async fn use_user_defined_same_directory() {
     let input = "@use \"use_user_defined_same_directory\";\na {\n color: use_user_defined_same_directory.$a;\n}";
     tempfile!(
         "use_user_defined_same_directory.scss",
@@ -98,12 +98,14 @@ fn use_user_defined_same_directory() {
     );
     assert_eq!(
         "a {\n  color: red;\n}\n\na {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn private_variable_begins_with_underscore() {
+#[tokio::test]
+async fn private_variable_begins_with_underscore() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -128,8 +130,8 @@ fn private_variable_begins_with_underscore() {
     );
 }
 
-#[test]
-fn private_variable_begins_with_hyphen() {
+#[tokio::test]
+async fn private_variable_begins_with_hyphen() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -154,8 +156,8 @@ fn private_variable_begins_with_hyphen() {
     );
 }
 
-#[test]
-fn private_function() {
+#[tokio::test]
+async fn private_function() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -180,8 +182,8 @@ fn private_function() {
     );
 }
 
-#[test]
-fn global_variable_exists_private() {
+#[tokio::test]
+async fn global_variable_exists_private() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -202,12 +204,14 @@ fn global_variable_exists_private() {
 
     assert_eq!(
         "a {\n  color: true;\n  color: false;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_user_defined_as() {
+#[tokio::test]
+async fn use_user_defined_as() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -226,12 +230,14 @@ fn use_user_defined_as() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n\na {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_user_defined_function() {
+#[tokio::test]
+async fn use_user_defined_function() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -250,12 +256,14 @@ fn use_user_defined_function() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_idempotent_no_alias() {
+#[tokio::test]
+async fn use_idempotent_no_alias() {
     let mut fs = TestFs::new();
 
     fs.add_file("_a.scss", r#""#);
@@ -272,8 +280,8 @@ fn use_idempotent_no_alias() {
     );
 }
 
-#[test]
-fn use_idempotent_with_alias() {
+#[tokio::test]
+async fn use_idempotent_with_alias() {
     let mut fs = TestFs::new();
 
     fs.add_file("_a.scss", r#""#);
@@ -291,8 +299,8 @@ fn use_idempotent_with_alias() {
     );
 }
 
-#[test]
-fn use_idempotent_builtin() {
+#[tokio::test]
+async fn use_idempotent_builtin() {
     let input = "@use \"sass:math\";\n@use \"sass:math\";\n";
 
     assert_err!(
@@ -301,28 +309,32 @@ fn use_idempotent_builtin() {
     );
 }
 
-#[test]
-fn use_with_simple() {
+#[tokio::test]
+async fn use_with_simple() {
     let input = "@use \"use_with_simple\" with ($a: red);\na {\n color: use_with_simple.$a;\n}";
     tempfile!("use_with_simple.scss", "$a: green !default;");
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_as_with() {
+#[tokio::test]
+async fn use_as_with() {
     let input = "@use \"use_as_with\" as module with ($a: red);\na {\n color: module.$a;\n}";
     tempfile!("use_as_with.scss", "$a: green !default;");
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_whitespace_and_comments() {
+#[tokio::test]
+async fn use_whitespace_and_comments() {
     let input = "@use  /**/  \"use_whitespace_and_comments\"  /**/  as  /**/  foo  /**/  with  /**/  (  /**/  $a  /**/  :  /**/  red  /**/  );";
     tempfile!(
         "use_whitespace_and_comments.scss",
@@ -330,12 +342,14 @@ fn use_whitespace_and_comments() {
     );
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_loud_comment_after_close_paren_with() {
+#[tokio::test]
+async fn use_loud_comment_after_close_paren_with() {
     let input = r#"@use "b" as foo with ($a : red)  /**/  ;"#;
     tempfile!(
         "use_loud_comment_after_close_paren_with.scss",
@@ -344,15 +358,15 @@ fn use_loud_comment_after_close_paren_with() {
     assert_err!(r#"Error: expected ";"."#, input);
 }
 
-#[test]
-fn use_with_builtin_module() {
+#[tokio::test]
+async fn use_with_builtin_module() {
     let input = "@use \"sass:math\" with ($e: 2.7);";
 
     assert_err!("Error: Built-in modules can't be configured.", input);
 }
 
-#[test]
-fn use_with_variable_never_used() {
+#[tokio::test]
+async fn use_with_variable_never_used() {
     let input = "@use \"use_with_variable_never_used\" with ($a: red);";
     tempfile!("use_with_variable_never_used.scss", "");
 
@@ -362,8 +376,8 @@ fn use_with_variable_never_used() {
     );
 }
 
-#[test]
-fn use_with_same_variable_multiple_times() {
+#[tokio::test]
+async fn use_with_same_variable_multiple_times() {
     let input = "@use \"use_with_same_variable_multiple_times\" as foo with ($a: b, $a: c);";
     tempfile!("use_with_same_variable_multiple_times.scss", "");
 
@@ -373,16 +387,16 @@ fn use_with_same_variable_multiple_times() {
     );
 }
 
-#[test]
-fn use_variable_redeclaration_var_dne() {
+#[tokio::test]
+async fn use_variable_redeclaration_var_dne() {
     let input = "@use \"use_variable_redeclaration_var_dne\" as mod;\nmod.$a: red;";
     tempfile!("use_variable_redeclaration_var_dne.scss", "");
 
     assert_err!("Error: Undefined variable.", input);
 }
 
-#[test]
-fn use_variable_redeclaration_global() {
+#[tokio::test]
+async fn use_variable_redeclaration_global() {
     let input = "@use \"use_variable_redeclaration_global\" as mod;\nmod.$a: red !global;";
     tempfile!("use_variable_redeclaration_global.scss", "$a: green;");
 
@@ -392,31 +406,35 @@ fn use_variable_redeclaration_global() {
     );
 }
 
-#[test]
-fn use_variable_redeclaration_simple() {
+#[tokio::test]
+async fn use_variable_redeclaration_simple() {
     let input =
         "@use \"use_variable_redeclaration_simple\" as mod;\nmod.$a: red; a { color: mod.$a; }";
     tempfile!("use_variable_redeclaration_simple.scss", "$a: green;");
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_variable_redeclaration_default() {
+#[tokio::test]
+async fn use_variable_redeclaration_default() {
     let input = "@use \"use_variable_redeclaration_default\" as mod;\nmod.$a: 1 % red !default; a { color: mod.$a; }";
     tempfile!("use_variable_redeclaration_default.scss", "$a: green;");
 
     assert_eq!(
         "a {\n  color: green;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_variable_redeclaration_private() {
+#[tokio::test]
+async fn use_variable_redeclaration_private() {
     let input = "@use \"use_variable_redeclaration_private\" as mod;\nmod.$-a: red;";
     tempfile!("use_variable_redeclaration_private.scss", "$a: green;");
 
@@ -426,8 +444,8 @@ fn use_variable_redeclaration_private() {
     );
 }
 
-#[test]
-fn use_cannot_see_modules_imported_by_other_modules() {
+#[tokio::test]
+async fn use_cannot_see_modules_imported_by_other_modules() {
     let input = r#"
        @use "use_cannot_see_modules_imported_by_other_modules__a" as a;
        @use "use_cannot_see_modules_imported_by_other_modules__b" as b;"#;
@@ -443,8 +461,8 @@ fn use_cannot_see_modules_imported_by_other_modules() {
 
     assert_err!("Error: There is no module with the namespace \"a\".", input);
 }
-#[test]
-fn use_can_see_modules_imported_by_other_modules_when_aliased_as_star() {
+#[tokio::test]
+async fn use_can_see_modules_imported_by_other_modules_when_aliased_as_star() {
     let input = r#"
        @use "use_can_see_modules_imported_by_other_modules_when_aliased_as_star__a" as *;
        a { color: math.$e; }
@@ -461,8 +479,8 @@ fn use_can_see_modules_imported_by_other_modules_when_aliased_as_star() {
     );
 }
 
-#[test]
-fn use_modules_imported_by_other_modules_does_not_cause_conflict() {
+#[tokio::test]
+async fn use_modules_imported_by_other_modules_does_not_cause_conflict() {
     let input = r#"
        @use "use_modules_imported_by_other_modules_does_not_cause_conflict__a" as a;
        @use "use_modules_imported_by_other_modules_does_not_cause_conflict__b" as b;"#;
@@ -478,12 +496,14 @@ fn use_modules_imported_by_other_modules_does_not_cause_conflict() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_mixin_can_use_scope_from_own_module() {
+#[tokio::test]
+async fn use_mixin_can_use_scope_from_own_module() {
     let input = r#"
         @use "use_mixin_can_use_scope_from_own_module__a" as a;
         @include a.foo();
@@ -502,12 +522,14 @@ fn use_mixin_can_use_scope_from_own_module() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_function_can_use_scope_from_own_module() {
+#[tokio::test]
+async fn use_function_can_use_scope_from_own_module() {
     let input = r#"
         @use "use_function_can_use_scope_from_own_module__a" as a;
 
@@ -527,19 +549,21 @@ fn use_function_can_use_scope_from_own_module() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_variable_redeclaration_builtin() {
+#[tokio::test]
+async fn use_variable_redeclaration_builtin() {
     let input = "@use \"sass:math\";\nmath.$e: red;";
 
     assert_err!("Error: Cannot modify built-in variable.", input);
 }
 
-#[test]
-fn use_variable_declaration_between_use() {
+#[tokio::test]
+async fn use_variable_declaration_between_use() {
     let input = r#"
         $a: red;
         $b: green;
@@ -552,12 +576,14 @@ fn use_variable_declaration_between_use() {
 
     assert_eq!(
         "a {\n  color: red red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default()).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default())
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn include_mixin_with_star_namespace() {
+#[tokio::test]
+async fn include_mixin_with_star_namespace() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -577,12 +603,14 @@ fn include_mixin_with_star_namespace() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn include_variable_with_star_namespace() {
+#[tokio::test]
+async fn include_variable_with_star_namespace() {
     let mut fs = TestFs::new();
 
     fs.add_file("a.scss", r#"$a: red;"#);
@@ -597,12 +625,14 @@ fn include_variable_with_star_namespace() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn include_function_with_star_namespace() {
+#[tokio::test]
+async fn include_function_with_star_namespace() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -622,12 +652,14 @@ fn include_function_with_star_namespace() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_with_through_forward_multiple() {
+#[tokio::test]
+async fn use_with_through_forward_multiple() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -664,12 +696,14 @@ fn use_with_through_forward_multiple() {
 
     assert_eq!(
         "in-left {\n  c: from input;\n}\n\nin-right {\n  d: from input;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn module_functions_empty() {
+#[tokio::test]
+async fn module_functions_empty() {
     let mut fs = TestFs::new();
 
     fs.add_file("_other.scss", r#""#);
@@ -685,12 +719,14 @@ fn module_functions_empty() {
 
     assert_eq!(
         "a {\n  b: ();\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn module_functions_through_forward() {
+#[tokio::test]
+async fn module_functions_through_forward() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -717,12 +753,14 @@ fn module_functions_through_forward() {
 
     assert_eq!(
         "a {\n  b: (\"foo\": get-function(\"foo\"));\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_variable_declared_in_this_and_other_module() {
+#[tokio::test]
+async fn use_variable_declared_in_this_and_other_module() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -748,9 +786,9 @@ fn use_variable_declared_in_this_and_other_module() {
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "we don't check for this"]
-fn use_variable_declared_in_two_modules() {
+async fn use_variable_declared_in_two_modules() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -783,8 +821,8 @@ fn use_variable_declared_in_two_modules() {
     );
 }
 
-#[test]
-fn import_module_using_same_builtin_module() {
+#[tokio::test]
+async fn import_module_using_same_builtin_module() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -808,12 +846,14 @@ fn import_module_using_same_builtin_module() {
 
     assert_eq!(
         "",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn import_module_using_same_builtin_module_has_styles() {
+#[tokio::test]
+async fn import_module_using_same_builtin_module_has_styles() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -841,12 +881,14 @@ fn import_module_using_same_builtin_module_has_styles() {
 
     assert_eq!(
         "a {\n  color: red;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
-fn use_member_global_variable_assignment_toplevel() {
+#[tokio::test]
+async fn use_member_global_variable_assignment_toplevel() {
     let mut fs = TestFs::new();
 
     fs.add_file(
@@ -864,7 +906,7 @@ fn use_member_global_variable_assignment_toplevel() {
         @use "other" as *;
 
         $member: new value;
-        
+
         a {
             b: get-member()
         }
@@ -872,13 +914,15 @@ fn use_member_global_variable_assignment_toplevel() {
 
     assert_eq!(
         "a {\n  b: new value;\n}\n",
-        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs)).expect(input)
+        &grass::from_string(input.to_string(), &grass::Options::default().fs(&fs))
+            .await
+            .expect(input)
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "we don't hermetically evaluate @extend"]
-fn use_module_with_extend() {
+async fn use_module_with_extend() {
     let mut fs = TestFs::new();
 
     fs.add_file(

@@ -2,7 +2,9 @@ use std::{
     borrow::Cow,
     cell::RefCell,
     collections::BTreeMap,
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
 use grass::{Fs, Logger};
@@ -12,10 +14,11 @@ use grass_compiler::codemap::SpanLoc;
 macro_rules! test {
     (@base $( #[$attr:meta] ),*$func:ident, $input:expr, $output:expr, $options:expr) => {
         $(#[$attr])*
-        #[test]
         #[allow(non_snake_case)]
-        fn $func() {
+        #[tokio::test]
+        async fn $func() {
             let sass = grass::from_string($input.to_string(), &$options)
+                .await
                 .expect(concat!("failed to parse on ", $input));
             assert_eq!(
                 String::from($output),
@@ -37,10 +40,10 @@ macro_rules! test {
 macro_rules! error {
     (@base $( #[$attr:meta] ),*$func:ident, $input:expr, $err:expr, $options:expr) => {
         $(#[$attr])*
-        #[test]
         #[allow(non_snake_case)]
-        fn $func() {
-            match grass::from_string($input.to_string(), &$options) {
+        #[tokio::test]
+        async fn $func() {
+            match grass::from_string($input.to_string(), &$options).await {
                 Ok(..) => panic!("did not fail"),
                 Err(e) => assert_eq!($err, e.to_string()
                                                 .chars()
@@ -102,7 +105,7 @@ macro_rules! tempfile {
 #[macro_export]
 macro_rules! assert_err {
     ($err:literal, $input:expr) => {
-        match grass::from_string($input.to_string(), &grass::Options::default()) {
+        match grass::from_string($input.to_string(), &grass::Options::default()).await {
             Ok(..) => panic!("did not fail"),
             Err(e) => assert_eq!(
                 $err,
@@ -115,7 +118,7 @@ macro_rules! assert_err {
         }
     };
     ($input:expr, $err:expr, $options:expr) => {
-        match grass::from_string($input.to_string(), &$options) {
+        match grass::from_string($input.to_string(), &$options).await {
             Ok(..) => panic!("did not fail"),
             Err(e) => assert_eq!(
                 $err,
@@ -160,8 +163,13 @@ impl Fs for TestFs {
         false
     }
 
-    fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
-        Ok(self.files.get(path).unwrap().as_bytes().to_vec())
+    fn read(&self, path: &Path) -> Pin<Box<dyn Future<Output = std::io::Result<Vec<u8>>>>> {
+        Box::pin(std::future::ready(Ok(self
+            .files
+            .get(path)
+            .unwrap()
+            .as_bytes()
+            .to_vec())))
     }
 }
 

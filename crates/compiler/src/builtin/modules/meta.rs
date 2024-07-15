@@ -14,7 +14,7 @@ use crate::builtin::{
 };
 use crate::serializer::serialize_calculation_arg;
 
-fn load_css(mut args: ArgumentResult, visitor: &mut Visitor) -> SassResult<()> {
+async fn load_css(mut args: ArgumentResult, visitor: &mut Visitor<'_>) -> SassResult<()> {
     args.max_args(2)?;
 
     let span = args.span();
@@ -59,9 +59,11 @@ fn load_css(mut args: ArgumentResult, visitor: &mut Visitor) -> SassResult<()> {
 
     let _configuration = Arc::new(RefCell::new(configuration));
 
-    let style_sheet = visitor.load_style_sheet(url.as_ref(), false, args.span())?;
+    let style_sheet = visitor
+        .load_style_sheet(url.as_ref(), false, args.span())
+        .await?;
 
-    visitor.visit_stylesheet(style_sheet)?;
+    visitor.visit_stylesheet(style_sheet).await?;
 
     // todo: support the $with argument to load-css
     // visitor.load_module(
@@ -181,5 +183,7 @@ pub(crate) fn declare(f: &mut Module) {
     f.insert_builtin("calc-args", calc_args);
     f.insert_builtin("calc-name", calc_name);
 
-    f.insert_builtin_mixin("load-css", load_css);
+    // f.insert_builtin_mixin("load-css", |args, visitor| {
+    //     Box::pin(async { load_css(args, visitor).await })
+    // });
 }

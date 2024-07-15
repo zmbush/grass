@@ -213,7 +213,8 @@ fn cli() -> Command {
         )
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> std::io::Result<()> {
     let matches = cli().get_matches();
 
     let load_paths = matches
@@ -247,7 +248,7 @@ fn main() -> std::io::Result<()> {
 
     buf_out.write_all(
         if let Some(name) = matches.get_one::<String>("INPUT") {
-            from_path(name, options)
+            from_path(name, options).await
         } else if matches.get_flag("STDIN") {
             from_string(
                 {
@@ -257,6 +258,7 @@ fn main() -> std::io::Result<()> {
                 },
                 options,
             )
+            .await
         } else {
             unreachable!()
         }

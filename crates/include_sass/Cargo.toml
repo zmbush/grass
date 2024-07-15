@@ -19,6 +19,7 @@ proc-macro = true
 syn = { version = "2", default-features = false }
 grass_compiler = { path = "../compiler", version = "=0.13.3" }
 quote = { version = "1.0.23", default-features = false }
+smol = "2"
 
 [features]
 nightly = []

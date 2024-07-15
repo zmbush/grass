@@ -3,9 +3,11 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsStr,
     fmt,
+    future::Future,
     iter::FromIterator,
     mem,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
 };
 
@@ -172,14 +174,14 @@ impl<'a> Visitor<'a> {
         }
     }
 
-    pub(crate) fn visit_stylesheet(&mut self, mut style_sheet: StyleSheet) -> SassResult<()> {
+    pub(crate) async fn visit_stylesheet(&mut self, mut style_sheet: StyleSheet) -> SassResult<()> {
         self.active_modules.insert(style_sheet.url.clone());
         let was_in_plain_css = self.is_plain_css;
         self.is_plain_css = style_sheet.is_plain_css;
         mem::swap(&mut self.current_import_path, &mut style_sheet.url);
 
         for stmt in style_sheet.body {
-            let result = self.visit_stmt(stmt)?;
+            let result = Box::pin(self.visit_stmt_root(stmt)).await?;
             debug_assert!(result.is_none());
         }
 
@@ -207,6 +209,21 @@ impl<'a> Visitor<'a> {
         Ok(Some(self.without_slash(val)))
     }
 
+    pub(crate) async fn visit_stmt_root(&mut self, stmt: AstStmt) -> SassResult<Option<Value>> {
+        match stmt {
+            AstStmt::ImportRule(import_rule) => self.visit_import_rule(import_rule).await,
+            AstStmt::Use(use_rule) => {
+                self.visit_use_rule(use_rule).await?;
+                Ok(None)
+            }
+            AstStmt::Forward(forward_rule) => {
+                self.visit_forward_rule(forward_rule).await?;
+                Ok(None)
+            }
+            stmt => self.visit_stmt(stmt),
+        }
+    }
+
     // todo: we really don't have to return Option<Value> from all of these children
     pub(crate) fn visit_stmt(&mut self, stmt: AstStmt) -> SassResult<Option<Value>> {
         match stmt {
@@ -222,7 +239,6 @@ impl<'a> Visitor<'a> {
             AstStmt::While(while_stmt) => self.visit_while_stmt(&while_stmt),
             AstStmt::VariableDecl(decl) => self.visit_variable_decl(decl),
             AstStmt::LoudComment(comment) => self.visit_loud_comment(comment),
-            AstStmt::ImportRule(import_rule) => self.visit_import_rule(import_rule),
             AstStmt::FunctionDecl(func) => {
                 self.visit_function_decl(func);
                 Ok(None)
@@ -241,22 +257,16 @@ impl<'a> Visitor<'a> {
             AstStmt::Extend(extend_rule) => self.visit_extend_rule(extend_rule),
             AstStmt::AtRootRule(at_root_rule) => self.visit_at_root_rule(at_root_rule),
             AstStmt::Debug(debug_rule) => self.visit_debug_rule(debug_rule),
-            AstStmt::Use(use_rule) => {
-                self.visit_use_rule(use_rule)?;
-                Ok(None)
-            }
-            AstStmt::Forward(forward_rule) => {
-                self.visit_forward_rule(forward_rule)?;
-                Ok(None)
-            }
             AstStmt::Supports(supports_rule) => {
                 self.visit_supports_rule(supports_rule)?;
                 Ok(None)
             }
+
+            _stmt => Ok(None),
         }
     }
 
-    fn visit_forward_rule(&mut self, forward_rule: AstForwardRule) -> SassResult<()> {
+    async fn visit_forward_rule(&mut self, forward_rule: AstForwardRule) -> SassResult<()> {
         let old_config = Arc::clone(&self.configuration);
         let adjusted_config =
             Configuration::through_forward(Arc::clone(&old_config), &forward_rule);
@@ -275,7 +285,8 @@ impl<'a> Visitor<'a> {
 
                     Ok(())
                 },
-            )?;
+            )
+            .await?;
 
             Self::remove_used_configuration(
                 &adjusted_config,
@@ -324,7 +335,8 @@ impl<'a> Visitor<'a> {
 
                     Ok(())
                 },
-            )?;
+            )
+            .await?;
             self.configuration = old_config;
         }
 
@@ -539,7 +551,7 @@ impl<'a> Visitor<'a> {
         Ok(())
     }
 
-    fn execute(
+    async fn execute(
         &mut self,
         stylesheet: StyleSheet,
         configuration: Option<Arc<RefCell<Configuration>>>,
@@ -583,64 +595,70 @@ impl<'a> Visitor<'a> {
         let env = Environment::new();
         let mut extension_store = ExtensionStore::new(self.empty_span);
 
-        self.with_environment::<SassResult<()>, _>(env.new_closure(), |visitor| {
-            let old_parent = visitor.parent;
-            mem::swap(&mut visitor.extender, &mut extension_store);
-            let old_style_rule = visitor.style_rule_ignoring_at_root.take();
-            let old_media_queries = visitor.media_queries.take();
-            let old_declaration_name = visitor.declaration_name.take();
-            let old_in_unknown_at_rule = visitor.flags.in_unknown_at_rule();
-            let old_at_root_excluding_style_rule = visitor.flags.at_root_excluding_style_rule();
-            let old_in_keyframes = visitor.flags.in_keyframes();
-            let old_configuration = if let Some(new_config) = configuration {
-                Some(mem::replace(&mut visitor.configuration, new_config))
-            } else {
-                None
-            };
-            visitor.parent = None;
-            visitor.flags.set(ContextFlags::IN_UNKNOWN_AT_RULE, false);
-            visitor
-                .flags
-                .set(ContextFlags::AT_ROOT_EXCLUDING_STYLE_RULE, false);
-            visitor.flags.set(ContextFlags::IN_KEYFRAMES, false);
+        self.async_with_environment::<SassResult<()>, _>(env.new_closure(), |visitor| {
+            let mut extension_store = extension_store.clone();
+            Box::pin(async move {
+                let old_parent = visitor.parent;
+                mem::swap(&mut visitor.extender, &mut extension_store);
+                let old_style_rule = visitor.style_rule_ignoring_at_root.take();
+                let old_media_queries = visitor.media_queries.take();
+                let old_declaration_name = visitor.declaration_name.take();
+                let old_in_unknown_at_rule = visitor.flags.in_unknown_at_rule();
+                let old_at_root_excluding_style_rule = visitor.flags.at_root_excluding_style_rule();
+                let old_in_keyframes = visitor.flags.in_keyframes();
+                let old_configuration = if let Some(new_config) = configuration {
+                    Some(mem::replace(&mut visitor.configuration, new_config))
+                } else {
+                    None
+                };
+                visitor.parent = None;
+                visitor.flags.set(ContextFlags::IN_UNKNOWN_AT_RULE, false);
+                visitor
+                    .flags
+                    .set(ContextFlags::AT_ROOT_EXCLUDING_STYLE_RULE, false);
+                visitor.flags.set(ContextFlags::IN_KEYFRAMES, false);
 
-            visitor.visit_stylesheet(stylesheet)?;
+                visitor.visit_stylesheet(stylesheet).await?;
 
-            // visitor.importer = old_importer;
-            // visitor.stylesheet = old_stylesheet;
-            // visitor.root = old_root;
-            visitor.parent = old_parent;
-            // visitor.end_of_imports = old_end_of_imports;
-            // visitor.out_of_order_imports = old_out_of_order_imports;
-            mem::swap(&mut visitor.extender, &mut extension_store);
-            visitor.style_rule_ignoring_at_root = old_style_rule;
-            visitor.media_queries = old_media_queries;
-            visitor.declaration_name = old_declaration_name;
-            visitor
-                .flags
-                .set(ContextFlags::IN_UNKNOWN_AT_RULE, old_in_unknown_at_rule);
-            visitor.flags.set(
-                ContextFlags::AT_ROOT_EXCLUDING_STYLE_RULE,
-                old_at_root_excluding_style_rule,
-            );
-            visitor
-                .flags
-                .set(ContextFlags::IN_KEYFRAMES, old_in_keyframes);
-            if let Some(old_config) = old_configuration {
-                visitor.configuration = old_config;
-            }
+                // visitor.importer = old_importer;
+                // visitor.stylesheet = old_stylesheet;
+                // visitor.root = old_root;
+                visitor.parent = old_parent;
+                // visitor.end_of_imports = old_end_of_imports;
+                // visitor.out_of_order_imports = old_out_of_order_imports;
+                mem::swap(&mut visitor.extender, &mut extension_store);
+                visitor.style_rule_ignoring_at_root = old_style_rule;
+                visitor.media_queries = old_media_queries;
+                visitor.declaration_name = old_declaration_name;
+                visitor
+                    .flags
+                    .set(ContextFlags::IN_UNKNOWN_AT_RULE, old_in_unknown_at_rule);
+                visitor.flags.set(
+                    ContextFlags::AT_ROOT_EXCLUDING_STYLE_RULE,
+                    old_at_root_excluding_style_rule,
+                );
+                visitor
+                    .flags
+                    .set(ContextFlags::IN_KEYFRAMES, old_in_keyframes);
+                if let Some(old_config) = old_configuration {
+                    visitor.configuration = old_config;
+                }
 
-            Ok(())
-        })?;
+                Ok(())
+            })
+        })
+        .await?;
 
-        let module = env.to_module(extension_store);
+        let mut final_extension_store: ExtensionStore = ExtensionStore::new(self.empty_span);
+        std::mem::swap(&mut final_extension_store, &mut extension_store);
+        let module = env.to_module(final_extension_store);
 
         self.modules.insert(url, Arc::clone(&module));
 
         Ok(module)
     }
 
-    pub(crate) fn load_module(
+    pub(crate) async fn load_module(
         &mut self,
         url: &Path,
         configuration: Option<Arc<RefCell<Configuration>>>,
@@ -689,7 +707,9 @@ impl<'a> Visitor<'a> {
         }
 
         // todo: decide on naming convention for style_sheet vs stylesheet
-        let stylesheet = self.load_style_sheet(url.to_string_lossy().as_ref(), false, span)?;
+        let stylesheet = self
+            .load_style_sheet(url.to_string_lossy().as_ref(), false, span)
+            .await?;
 
         let canonical_url = self
             .options
@@ -703,7 +723,9 @@ impl<'a> Visitor<'a> {
 
         self.active_modules.insert(canonical_url.clone());
 
-        let module = self.execute(stylesheet.clone(), configuration, names_in_errors)?;
+        let module = self
+            .execute(stylesheet.clone(), configuration, names_in_errors)
+            .await?;
 
         self.active_modules.remove(&canonical_url);
 
@@ -712,7 +734,7 @@ impl<'a> Visitor<'a> {
         Ok(())
     }
 
-    fn visit_use_rule(&mut self, use_rule: AstUseRule) -> SassResult<()> {
+    async fn visit_use_rule(&mut self, use_rule: AstUseRule) -> SassResult<()> {
         let configuration = if use_rule.configuration.is_empty() {
             Arc::new(RefCell::new(Configuration::empty()))
         } else {
@@ -747,7 +769,8 @@ impl<'a> Visitor<'a> {
 
                 Ok(())
             },
-        )?;
+        )
+        .await?;
 
         Self::assert_configuration_is_empty(&configuration, false)?;
 
@@ -779,11 +802,11 @@ impl<'a> Visitor<'a> {
         Err((msg, span).into())
     }
 
-    fn visit_import_rule(&mut self, import_rule: AstImportRule) -> SassResult<Option<Value>> {
+    async fn visit_import_rule(&mut self, import_rule: AstImportRule) -> SassResult<Option<Value>> {
         for import in import_rule.imports {
             match import {
                 AstImport::Sass(dynamic_import) => {
-                    self.visit_dynamic_import_rule(&dynamic_import)?;
+                    self.visit_dynamic_import_rule(&dynamic_import).await?;
                 }
                 AstImport::Plain(static_import) => self.visit_static_import_rule(static_import)?,
             }
@@ -881,7 +904,7 @@ impl<'a> Visitor<'a> {
         }
     }
 
-    fn import_like_node(
+    async fn import_like_node(
         &mut self,
         url: &str,
         _for_import: bool,
@@ -895,7 +918,7 @@ impl<'a> Visitor<'a> {
 
             let file = self.map.add_file(
                 name.to_string_lossy().into(),
-                String::from_utf8(self.options.fs.read(&name)?)?,
+                String::from_utf8(self.options.fs.read(&name).await?)?,
             );
 
             let old_is_use_allowed = self.flags.is_use_allowed();
@@ -919,7 +942,7 @@ impl<'a> Visitor<'a> {
         Err(("Can't find stylesheet to import.", span).into())
     }
 
-    pub(crate) fn load_style_sheet(
+    pub(crate) async fn load_style_sheet(
         &mut self,
         url: &str,
         // default=false
@@ -927,11 +950,16 @@ impl<'a> Visitor<'a> {
         span: Span,
     ) -> SassResult<StyleSheet> {
         // todo: import cache
-        self.import_like_node(url, for_import, span)
+        self.import_like_node(url, for_import, span).await
     }
 
-    fn visit_dynamic_import_rule(&mut self, dynamic_import: &AstSassImport) -> SassResult<()> {
-        let stylesheet = self.load_style_sheet(&dynamic_import.url, true, dynamic_import.span)?;
+    async fn visit_dynamic_import_rule(
+        &mut self,
+        dynamic_import: &AstSassImport,
+    ) -> SassResult<()> {
+        let stylesheet = self
+            .load_style_sheet(&dynamic_import.url, true, dynamic_import.span)
+            .await?;
 
         let url = stylesheet.url.clone();
 
@@ -946,7 +974,7 @@ impl<'a> Visitor<'a> {
         // need to put its CSS into an intermediate [ModifiableCssStylesheet] so
         // that we can hermetically resolve `@extend`s before injecting it.
         if stylesheet.uses.is_empty() && stylesheet.forwards.is_empty() {
-            self.visit_stylesheet(stylesheet)?;
+            self.visit_stylesheet(stylesheet).await?;
             return Ok(());
         }
 
@@ -956,31 +984,35 @@ impl<'a> Visitor<'a> {
         // this todo should be unreachable, as we currently do not push
         // to stylesheet.uses or stylesheet.forwards
         // let mut children = Vec::new();
-        let env = self.env.for_import();
+        let env = Arc::new(self.env.for_import());
 
-        self.with_environment::<SassResult<()>, _>(env.clone(), |visitor| {
-            let old_parent = visitor.parent;
-            let old_configuration = Arc::clone(&visitor.configuration);
+        self.async_with_environment::<SassResult<()>, _>((*env).clone(), |visitor| {
+            let env = env.clone();
+            Box::pin(async move {
+                let old_parent = visitor.parent;
+                let old_configuration = Arc::clone(&visitor.configuration);
 
-            if loads_user_defined_modules {
-                visitor.parent = Some(CssTree::ROOT);
-            }
+                if loads_user_defined_modules {
+                    visitor.parent = Some(CssTree::ROOT);
+                }
 
-            // This configuration is only used if it passes through a `@forward`
-            // rule, so we avoid creating unnecessary ones for performance reasons.
-            if !stylesheet.forwards.is_empty() {
-                visitor.configuration = Arc::new(RefCell::new(env.to_implicit_configuration()));
-            }
+                // This configuration is only used if it passes through a `@forward`
+                // rule, so we avoid creating unnecessary ones for performance reasons.
+                if !stylesheet.forwards.is_empty() {
+                    visitor.configuration = Arc::new(RefCell::new(env.to_implicit_configuration()));
+                }
 
-            visitor.visit_stylesheet(stylesheet)?;
+                visitor.visit_stylesheet(stylesheet).await?;
 
-            if loads_user_defined_modules {
-                visitor.parent = old_parent;
-            }
-            visitor.configuration = old_configuration;
+                if loads_user_defined_modules {
+                    visitor.parent = old_parent;
+                }
+                visitor.configuration = old_configuration;
 
-            Ok(())
-        })?;
+                Ok(())
+            })
+        })
+        .await?;
 
         // Create a dummy module with empty CSS and no extensions to make forwarded
         // members available in the current import context and to combine all the
@@ -1605,6 +1637,21 @@ impl<'a> Visitor<'a> {
         self.media_queries = old_media_queries;
         self.media_query_sources = old_media_query_sources;
         result
+    }
+
+    async fn async_with_environment<
+        T,
+        F: for<'env> FnOnce(&'env mut Self) -> Pin<Box<dyn Future<Output = T> + 'env>>,
+    >(
+        &mut self,
+        env: Environment,
+        callback: F,
+    ) -> T {
+        let mut old_env = env;
+        mem::swap(&mut self.env, &mut old_env);
+        let val = callback(self).await;
+        mem::swap(&mut self.env, &mut old_env);
+        val
     }
 
     fn with_environment<T, F: FnOnce(&mut Self) -> T>(
